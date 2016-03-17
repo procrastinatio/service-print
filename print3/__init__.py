@@ -32,5 +32,5 @@ def main(global_config, **settings):
 
 
     # required to find code decorated by view_config
-    config.scan(ignore=['print.tests', 'print.models.bod'])
+    config.scan(ignore=['print3.tests', 'print3.models.bod'])
     return config.make_wsgi_app()

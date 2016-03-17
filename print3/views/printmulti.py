@@ -23,7 +23,7 @@ from PyPDF2 import PdfFileMerger
 from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPBadRequest, HTTPInternalServerError
 from pyramid.response import Response
-from chsdi.lib.decorators import requires_authorization
+from print3.lib.decorators import requires_authorization
 
 import logging
 log = logging.getLogger(__name__)

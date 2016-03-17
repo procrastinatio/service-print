@@ -341,3 +341,4 @@ clean:
 .PHONY: cleanall
 cleanall: clean
 	rm -rf .venv
+	rm -rf print3.egg-info

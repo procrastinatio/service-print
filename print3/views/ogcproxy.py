@@ -8,7 +8,7 @@ from pyramid.view import view_config
 
 from pyramid.httpexceptions import HTTPBadRequest, HTTPBadGateway, HTTPNotAcceptable
 from pyramid.response import Response
-from print.lib.decorators import requires_authorization
+from print3.lib.decorators import requires_authorization
 
 
 from StringIO import StringIO
