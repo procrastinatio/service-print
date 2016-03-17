@@ -126,11 +126,11 @@ serve:
 
 .PHONY: test
 test:
-	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} print/tests/ -e .*e2e.*
+	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} print3/tests/ -e .*e2e.*
 
 .PHONY: teste2e
 teste2e:
-	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} print/tests/e2e/
+	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} print3/tests/e2e/
 
 .PHONY: lint
 lint:
@@ -331,7 +331,7 @@ clean:
 	rm -rf development.ini
 	rm -rf apache/wsgi.conf
 	rm -rf apache/tomcat-print.conf
-	rm -rf print/WEB-INF/web.xml
+	rm -rf tomcat/WEB-INF/web.xml
 	rm -rf apache/application.wsgi
 	rm -rf rc_branch
 	rm -rf deploy/deploy-branch.cfg

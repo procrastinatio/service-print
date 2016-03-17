@@ -8,7 +8,7 @@ CHANGES = open(os.path.join(here, 'CHANGES.txt')).read()
 
 requires = open(os.path.join(here, 'requirements.txt')).read().split('\n')
 
-setup(name='print',
+setup(name='print3',
       version='3.0.1',
       description='Print service for geo.admin.ch',
       long_description=README + '\n\n' + CHANGES,
@@ -31,6 +31,6 @@ setup(name='print',
       test_suite="print",
       entry_points="""\
       [paste.app_factory]
-      main = print:main
+      main = print3:main
       """,
       )
