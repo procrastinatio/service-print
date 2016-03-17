@@ -17,7 +17,7 @@ def main(global_config, **settings):
 
 
     # renderers
-    config.add_mako_renderer('.js')
+    #config.add_mako_renderer('.js')
     config.add_renderer('jsonp', JSONP(param_name='callback', indent=None, separators=(',', ':')))
 
 
@@ -32,5 +32,5 @@ def main(global_config, **settings):
 
 
     # required to find code decorated by view_config
-    config.scan(ignore=['chsdi.tests', 'chsdi.models.bod'])
+    config.scan(ignore=['print.tests', 'print.models.bod'])
     return config.make_wsgi_app()

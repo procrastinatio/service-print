@@ -1,7 +1,7 @@
 # Variables
 APACHE_ENTRY_PATH := $(shell if [ '$(APACHE_BASE_PATH)' = 'main' ]; then echo ''; else echo /$(APACHE_BASE_PATH); fi)
 APP_VERSION := $(shell python -c "print __import__('time').strftime('%s')")
-BASEWAR := print-servlet-2.0-SNAPSHOT-IMG-MAGICK.war
+BASEWAR := print-servlet-3.3-SNAPSHOT.war
 BRANCH_STAGING := $(shell if [ '$(DEPLOY_TARGET)' = 'dev' ]; then echo 'test'; else echo 'integration'; fi)
 BRANCH_TO_DELETE :=
 CURRENT_DIRECTORY := $(shell pwd)
@@ -13,11 +13,11 @@ INSTALL_DIRECTORY := .venv
 MODWSGI_USER := www-data
 NO_TESTS ?= withtests
 NODE_DIRECTORY := node_modules
-PRINT_INPUT := *.yaml *.png WEB-INF
-PRINT_OUTPUT_BASE := /srv/tomcat/tomcat1/webapps/print-chsdi3-$(APACHE_BASE_PATH)
+PRINT_INPUT :=  index.html favicon.ico print-apps mapfish_transparent.png META-INF WEB-INF
+PRINT_OUTPUT_BASE := /srv/tomcat/tomcat1/webapps/service-print-$(APACHE_BASE_PATH)
 PRINT_OUTPUT := $(PRINT_OUTPUT_BASE).war
 PRINT_TEMP_DIR := /var/cache/print
-PYTHON_FILES := $(shell find chsdi/* -path chsdi/static -prune -o -type f -name "*.py" -print)
+PYTHON_FILES := $(shell find print/* -path print/static -prune -o -type f -name "*.py" -print)
 SHORTENER_ALLOWED_DOMAINS := admin.ch, swisstopo.ch, bgdi.ch
 SHORTENER_ALLOWED_HOSTS :=
 TEMPLATE_FILES := $(shell find -type f -name "*.in" -print)
@@ -102,7 +102,7 @@ all: setup  templates  fixrights
 
 setup: .venv 
 
-templates: apache/wsgi.conf apache/tomcat-print.conf print/WEB-INF/web.xml development.ini production.ini
+templates: apache/wsgi.conf apache/tomcat-print.conf tomcat/WEB-INF/web.xml development.ini production.ini
 
 .PHONY: user
 user:
@@ -126,11 +126,11 @@ serve:
 
 .PHONY: test
 test:
-	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} chsdi/tests/ -e .*e2e.*
+	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} print/tests/ -e .*e2e.*
 
 .PHONY: teste2e
 teste2e:
-	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} chsdi/tests/e2e/
+	PYTHONPATH=${PYTHONPATH} ${NOSE_CMD} print/tests/e2e/
 
 .PHONY: lint
 lint:
@@ -164,21 +164,21 @@ deploybranchdemo:
 
 .PHONY: printconfig
 printconfig:
-	@echo '# File managed by zc.buildout mf-chsdi3'  > /srv/tomcat/tomcat1/bin/setenv-local.sh
+	@echo '# File managed by Makefile service-print'  > /srv/tomcat/tomcat1/bin/setenv-local.sh
 	@echo 'export JAVA_XMX="2G"'  >> /srv/tomcat/tomcat1/bin/setenv-local.sh
 
 .PHONY: printwar
-printwar: printconfig print/WEB-INF/web.xml.in
-	cd print && \
+printwar: printconfig tomcat/WEB-INF/web.xml.in
+	cd tomcat && \
 	mkdir temp_$(APP_VERSION) && \
 	echo "${GREEN}Updating print war...${RESET}" && \
-	cp -f ${BASEWAR} temp_$(APP_VERSION)/print-chsdi3-$(APACHE_BASE_PATH).war && \
+	cp -f ${BASEWAR} temp_$(APP_VERSION)/service-print-$(APACHE_BASE_PATH).war && \
 	cp -fr ${PRINT_INPUT} temp_$(APP_VERSION)/ && \
 	cd temp_$(APP_VERSION) && \
-	jar uf print-chsdi3-$(APACHE_BASE_PATH).war ${PRINT_INPUT} && \
+	jar uf service-print-$(APACHE_BASE_PATH).war ${PRINT_INPUT} && \
 	echo "${GREEN}Print war creation was successful.${RESET}" && \
 	rm -rf $(PRINT_OUTPUT) $(PRINT_OUTPUT_BASE) && \
-	cp -f print-chsdi3-$(APACHE_BASE_PATH).war $(PRINT_OUTPUT) && chmod 666 $(PRINT_OUTPUT) && cd .. && \
+	cp -f service-print-$(APACHE_BASE_PATH).war $(PRINT_OUTPUT) && chmod 666 $(PRINT_OUTPUT) && cd .. && \
 	echo "${GREEN}Removing temp directory${RESET}" && \
 	rm -rf temp_$(APP_VERSION) && \
 	echo "${GREEN}Restarting tomcat...${RESET}" && \
@@ -237,9 +237,9 @@ apache/tomcat-print.conf: apache/tomcat-print.conf.in
 		--var "apache_entry_path=$(APACHE_ENTRY_PATH)" \
 		--var "print_temp_dir=$(PRINT_TEMP_DIR)" $< > $@
 
-print/WEB-INF/web.xml.in:
-	@echo "${GREEN}Template file print/WEB-INF/web.xml has changed${RESET}"
-print/WEB-INF/web.xml: print/WEB-INF/web.xml.in
+tomcat/WEB-INF/web.xml.in:
+	@echo "${GREEN}Template file tomcat/WEB-INF/web.xml has changed${RESET}"
+tomcat/WEB-INF/web.xml: tomcat/WEB-INF/web.xml.in
 	@echo "${GREEN}Creating print/WEB-INF/web.xml...${RESET}"
 	${MAKO_CMD} \
 		--var "print_temp_dir=$(PRINT_TEMP_DIR)" $< > $@
@@ -336,6 +336,7 @@ clean:
 	rm -rf rc_branch
 	rm -rf deploy/deploy-branch.cfg
 	rm -rf deploy/conf/00-branch.conf
+	rm -rf tomcat/temp_*
 
 .PHONY: cleanall
 cleanall: clean
