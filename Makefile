@@ -1,7 +1,7 @@
 # Variables
 APACHE_ENTRY_PATH := $(shell if [ '$(APACHE_BASE_PATH)' = 'main' ]; then echo ''; else echo /$(APACHE_BASE_PATH); fi)
 APP_VERSION := $(shell python -c "print __import__('time').strftime('%s')")
-BASEWAR := print-servlet-3.3-SNAPSHOT.war
+BASEWAR := print-servlet-2.0-SNAPSHOT-IMG-MAGICK.war
 BRANCH_STAGING := $(shell if [ '$(DEPLOY_TARGET)' = 'dev' ]; then echo 'test'; else echo 'integration'; fi)
 BRANCH_TO_DELETE :=
 CURRENT_DIRECTORY := $(shell pwd)
@@ -13,7 +13,7 @@ INSTALL_DIRECTORY := .venv
 MODWSGI_USER := www-data
 NO_TESTS ?= withtests
 NODE_DIRECTORY := node_modules
-PRINT_INPUT := print-apps
+PRINT_INPUT := *.yaml *.png WEB-INF
 PRINT_OUTPUT_BASE := /srv/tomcat/tomcat1/webapps/print-chsdi3-$(APACHE_BASE_PATH)
 PRINT_OUTPUT := $(PRINT_OUTPUT_BASE).war
 PRINT_TEMP_DIR := /var/cache/print
@@ -95,13 +95,12 @@ help:
 	@echo "GEOADMINHOST:        ${GEOADMINHOST}"
 	@echo "GIT_BRANCH:          ${GIT_BRANCH}"
 	@echo "SERVER_PORT:         ${SERVER_PORT}"
-	@echo "PRINT_WAR:           ${PRINT_WAR}"
 	@echo
 
 .PHONY: all
-all: setup chsdi/static/css/extended.min.css templates potomo rss lint fixrights
+all: setup  templates  fixrights
 
-setup: .venv gdal node_modules
+setup: .venv 
 
 templates: apache/wsgi.conf apache/tomcat-print.conf print/WEB-INF/web.xml development.ini production.ini
 
@@ -143,72 +142,6 @@ autolint:
 	@echo "${GREEN}Auto correction of python files...${RESET}";
 	${AUTOPEP8_CMD} --in-place --aggressive --aggressive --verbose --ignore=${PEP8_IGNORE} $(PYTHON_FILES)
 
-.PHONY: doc
-doc: chsdi/static/css/extended.min.css
-	@echo "${GREEN}Building the documentation...${RESET}";
-	cd chsdi/static/doc && ../../../${SPHINX_CMD} -b html source build
-
-.PHONY:
-rss: doc chsdi/static/doc/build/releasenotes/index.html
-	@echo "${GREEN}Creating the rss feed from releasenotes${RESET}";
-	${PYTHON_CMD} scripts/rssFeedGen.py
-
-.PHONY: translate
-translate:
-	@echo "${GREEN}Updating translations...${RESET}";
-	${PYTHON_CMD} translations/translation2po.py chsdi/locale/;
-
-chsdi/locale/en/LC_MESSAGES/chsdi.po:
-chsdi/locale/en/LC_MESSAGES/chsdi.mo: chsdi/locale/en/LC_MESSAGES/chsdi.po
-	msgfmt -o $@ $<
-chsdi/locale/fr/LC_MESSAGES/chsdi.po:
-chsdi/locale/fr/LC_MESSAGES/chsdi.mo: chsdi/locale/fr/LC_MESSAGES/chsdi.po
-	msgfmt -o $@ $<
-chsdi/locale/de/LC_MESSAGES/chsdi.po:
-chsdi/locale/de/LC_MESSAGES/chsdi.mo: chsdi/locale/de/LC_MESSAGES/chsdi.po
-	msgfmt -o $@ $<
-chsdi/locale/fi/LC_MESSAGES/chsdi.po:
-chsdi/locale/fi/LC_MESSAGES/chsdi.mo: chsdi/locale/fi/LC_MESSAGES/chsdi.po
-	msgfmt -o $@ $<
-chsdi/locale/it/LC_MESSAGES/chsdi.po:
-chsdi/locale/it/LC_MESSAGES/chsdi.mo: chsdi/locale/it/LC_MESSAGES/chsdi.po
-	msgfmt -o $@ $<
-
-potomo: chsdi/locale/en/LC_MESSAGES/chsdi.mo chsdi/locale/fr/LC_MESSAGES/chsdi.mo \
-        chsdi/locale/de/LC_MESSAGES/chsdi.mo chsdi/locale/fi/LC_MESSAGES/chsdi.mo \
-        chsdi/locale/it/LC_MESSAGES/chsdi.mo
-
-.PHONY: gdal
-gdal: .venv
-	@if [ ! -d $(INSTALL_DIRECTORY)/build ]; \
-	then \
-		echo "${GREEN}Installing GDAL...${RESET}"; \
-		mkdir -p $(INSTALL_DIRECTORY)/build && \
-		${PIP_CMD} install --download $(INSTALL_DIRECTORY)/build GDAL==$(GDAL_VERSION) && \
-		cd $(INSTALL_DIRECTORY)/build && \
-		tar -xzf GDAL-$(GDAL_VERSION).tar.gz && \
-		cd GDAL-$(GDAL_VERSION) && \
-		../../../${PYTHON_CMD} setup.py build_ext --gdal-config=/usr/bin/gdal-config-64 --library-dirs=/usr/lib --include-dirs=/usr/include/gdal && \
-		../../../${PYTHON_CMD} setup.py install --root / && \
-		cd ../../.. && \
-		${PYTHON_CMD} -c "from osgeo import gdal; print('GDAL installed'); print(gdal.__version__, gdal.__file__)"; \
-	fi
-
-.PHONY: updateapi
-updateapi:
-	@echo "${GREEN}Updating geoadmin API...${RESET}";
-	rm -rf chsdi/static/js/ol3 && \
-	cd chsdi/static/js/ && \
-	git clone https://github.com/geoadmin/ol3.git && \
-	cd chsdi/static/js/ol3 && \
-	git remote add upstream https://github.com/openlayers/ol3 && \
-	git fetch upstream && \
-	npm install && \
-	API_URL=$(API_URL) make -f Makefile-ga build-ga && \
-	make -f Makefile-ga build-ga chsdi/static/css/ && \
-	cp build/ga.css chsdi/static/css/ && \
-	cp build/ga*.js chsdi/static/js/ && \
-	cp resources/EPSG* chsdi/static/js/
 
 .PHONY: deploybranch
 deploybranch:
@@ -386,17 +319,6 @@ requirements.txt:
 	${PYTHON_CMD} setup.py develop
 	${PIP_CMD} install Pillow==3.1.0
 
-package.json:
-	@echo "${GREEN}File package.json has changed${RESET}";
-node_modules: package.json
-	@echo "${GREEN}Installing node packages...${RESET}";
-	npm install
-
-chsdi/static/less/extended.less:
-	@echo "${GREEN}File chsdi/static/less/extended.less has changed${RESET}";
-chsdi/static/css/extended.min.css: chsdi/static/less/extended.less
-	@echo "${GREEN}Generating new css file...${RESET}";
-	node_modules/.bin/lessc -ru --clean-css $< $@
 
 fixrights:
 	@echo "${GREEN}Fixing rights...${RESET}";
@@ -418,10 +340,3 @@ clean:
 .PHONY: cleanall
 cleanall: clean
 	rm -rf .venv
-	rm -rf node_modules
-	rm -rf chsdi/static/css/extended.min.css
-	rm -rf chsdi/locale/en/LC_MESSAGES/chsdi.mo
-	rm -rf chsdi/locale/fr/LC_MESSAGES/chsdi.mo
-	rm -rf chsdi/locale/de/LC_MESSAGES/chsdi.mo
-	rm -rf chsdi/locale/fi/LC_MESSAGES/chsdi.mo
-	rm -rf chsdi/locale/it/LC_MESSAGES/chsdi.mo
