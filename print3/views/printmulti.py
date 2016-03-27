@@ -5,6 +5,7 @@ import os.path
 import traceback
 import sys
 import urllib
+import urllib2
 import json
 import re
 import copy
@@ -12,6 +13,7 @@ import datetime
 import time
 import multiprocessing
 import random
+import uuid
 from urlparse import urlparse, parse_qs, urlsplit, urlunparse
 from urllib import urlencode, quote_plus, unquote_plus
 
@@ -28,11 +30,13 @@ from print3.lib.decorators import requires_authorization
 import logging
 log = logging.getLogger(__name__)
 
+log.setLevel(logging.DEBUG)
+
 
 NUMBER_POOL_PROCESSES = multiprocessing.cpu_count()
 MAPFISH_FILE_PREFIX = 'mapfish-print'
 MAPFISH_MULTI_FILE_PREFIX = MAPFISH_FILE_PREFIX + '-multi'
-USE_MULTIPROCESS = True
+USE_MULTIPROCESS = False
 
 
 def _zeitreihen(d, api_url):
@@ -82,13 +86,22 @@ def _normalize_imageDisplay(display):
         str(int(display[1] * ratio)) + ',' + \
         str(targetDPI)
 
+def _get_layers(spec):
+    try:
+        layers = spec['attributes']['map']['layers']
+    except KeyError:
+        layers = []
+        
+    return layers
+        
+    
 
 def _get_timestamps(spec, api_url):
     '''Returns the layers indices to be printed for each timestamp
     For instance (u'19971231', [1, 2]), (u'19981231', [0, 1, 2])  '''
 
     results = {}
-    lyrs = spec.get('layers', [])
+    lyrs = _get_layers(spec)
     log.debug('[_get_timestamps] layers: %s', lyrs)
     for idx, lyr in enumerate(lyrs):
         # For zeitreihen, we always get the timestamps from the service
@@ -195,40 +208,68 @@ def worker(job):
 
     timestamp = None
     (idx, url, headers, timestamp, layers, tmp_spec, print_temp_dir, infofile, cancelfile, lock) = job
-
-    for layer in layers:
+    
+    
+    
+    for lyr in tmp_spec['attributes']['map']['layers']:
         try:
-            tmp_spec['layers'][layer]['params']['TIME'] = str(timestamp)
+            del lyr['timestamps']  # this makes print server chocke
+            layername = lyr['layer']
+            if layername in layers:
+            
+                lyr['dimensionParams']['TIME'] = str(timestamp)
         except:
-            continue
+            pass
 
-    log.debug('spec: %s', json.dumps(tmp_spec))
+    #log.debug('[worker] tmp_spec: %s', json.dumps(tmp_spec))
 
     # Before launching print request, check if process is canceled
     if os.path.isfile(cancelfile):
         return (timestamp, None)
+    log.debug('[worker] Requesting: %s', url)
+    #h = {'Referer': headers.get('Referer', 'http://map.geo.admin.ch'),#FIXME has to be somehting
+    #     'Content-Type': 'application/json'} 
+    #log.debug('[worker] headers: %s', h)
+    #http = Http(disable_ssl_certificate_validation=True)
+    #resp, content = http.request(url, method='POST',
+    #                            body=json.dumps(tmp_spec), headers=h)
 
-    h = {'Referer': headers.get('Referer')}
-    http = Http(disable_ssl_certificate_validation=True)
-    resp, content = http.request(url, method='POST',
-                                 body=json.dumps(tmp_spec), headers=h)
-
-    if int(resp.status) == 200:
-        # GetURL '141028163227.pdf.printout', file 'mapfish-print141028163227.pdf.printout'
-        # We only get the pdf name and rely on the fact that they are stored on Zadara
-        try:
-            pdf_url = json.loads(content)['getURL']
-            log.debug('[Worker] pdf_url: %s', pdf_url)
-            filename = os.path.basename(urlsplit(pdf_url).path)
+    #if int(resp.status) == 200:
+    #    # GetURL '141028163227.pdf.printout', file 'mapfish-print141028163227.pdf.printout'
+    #    # We only get the pdf name and rely on the fact that they are stored on Zadara
+    #    log.debug('[Worker] headers: {}'.format(dir(resp)))
+    opener = urllib2.build_opener(urllib2.HTTPHandler())
+    request = urllib2.Request(url, data=json.dumps(tmp_spec))
+    request.add_header("Content-Type",'application/json')
+    request.add_header("Referer", "http://samere.geo.admin.ch")
+        
+        
+      
+    try:
+            #pdf_url = json.loads(content)['downloadURL']
+            #log.debug('[Worker] pdf_url: {}'.format(pdf_url))
+            #filename = os.path.basename(urlsplit(pdf_url).path)
+            filename = str(uuid.uuid1())
             localname = os.path.join(print_temp_dir, MAPFISH_FILE_PREFIX + filename)
-        except:
+     
+            connection = opener.open(request)
+    except:
             log.debug('[Worker] Failed timestamp: %s', timestamp)
             exc_type, exc_value, exc_traceback = sys.exc_info()
-            log.debug("*** Traceback:/n" + traceback.print_tb(exc_traceback, limit=1, file=sys.stdout))
-            log.debug("*** Exception:/n" + traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout))
-
+            log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
+            log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
+            
             return (timestamp, None)
+      
+    if connection.code == 200:
+        CHUNK = 1024
+        with open(localname, 'wb') as fp:
+            while True:
+                    chunk = connection.read(CHUNK)
+                    if not chunk: break
+                    fp.write(chunk)
         _increment_info(lock, infofile)
+        
         return (timestamp, localname)
     else:
         log.debug('[Worker] Failed get/generate PDF for: %s. Error: %s', timestamp, resp.status)
@@ -241,7 +282,7 @@ def worker(job):
 def create_and_merge(info):
 
     lock = multiprocessing.Manager().Lock()
-    (spec, print_temp_dir, scheme, api_url, headers, unique_filename) = info
+    (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename) = info
 
     def _isMultiPage(spec):
         isMultiPage = False
@@ -299,7 +340,8 @@ def create_and_merge(info):
     jobs = []
     all_timestamps = []
 
-    create_pdf_url = 'http:' + api_url + '/print/create.json'
+    ## FIXME Make it more flexible    
+    create_pdf_url = 'http:' + print_url + '/print/print/geoadmin3/buildreport.pdf'
 
     url = create_pdf_url + '?url=' + urllib.quote_plus(create_pdf_url)
     infofile = create_info_file(print_temp_dir, unique_filename)
@@ -327,8 +369,8 @@ def create_and_merge(info):
                     pass
 
             if ts is not None:
-                qrcodeurl = spec['qrcodeurl']
-                tmp_spec['pages'][0]['timestamp'] = str(ts[0:4]) + "\n"
+                qrcodeurl = spec['attributes'].get('qrcodeurl', 'https://map.geo.admin.ch/') #['qrimage']
+                tmp_spec['pages'][0]['timestamp'] = str(ts[0:4]) # FIXME why did we add this char ???? + "\n"
 
                 ''' Adapteds the qrcode url and shortlink to match the timestamp
                     on every page of the PDF document'''
@@ -377,8 +419,8 @@ def create_and_merge(info):
                 del pool._pool[i]
             log.error('Error while generating the partial PDF: %s', e)
             exc_type, exc_value, exc_traceback = sys.exc_info()
-            log.debug("*** Traceback:/n" + traceback.print_tb(exc_traceback, limit=1, file=sys.stdout))
-            log.debug("*** Exception:/n" + traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout))
+            log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
+            log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
             return 1
     else:
         pdfs = []
@@ -400,7 +442,9 @@ def create_and_merge(info):
         log.error('Something went wrong while merging PDFs')
         return 3
 
-    pdf_download_url = scheme + ':' + api_url + '/print/-multi' + unique_filename + '.pdf.printout'
+    # FIXME
+    #pdf_download_url = scheme + ':' + api_url + '/print/-multi' + unique_filename + '.pdf.printout'
+    pdf_download_url = scheme + ':' + print_url + '/download/-multi' + unique_filename + '.pdf.printout'
     with open(infofile, 'w+') as outfile:
         json.dump({'status': 'done', 'getURL': pdf_download_url}, outfile)
 
@@ -435,6 +479,7 @@ class PrintMulti(object):
 
     def __init__(self, request):
         self.request = request
+        self.server_id  = request.registry.settings['server_id']
 
     #@requires_authorization()
     @view_config(route_name='print_cancel', renderer='jsonp')
@@ -488,28 +533,38 @@ class PrintMulti(object):
         except:
             log.debug('JSON content could not be parsed')
             exc_type, exc_value, exc_traceback = sys.exc_info()
-            log.debug("*** Traceback:/n" + traceback.print_tb(exc_traceback, limit=1, file=sys.stdout))
-            log.debug("*** Exception:/n" + traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout))
-            raise HTTPBadRequest('JSON content could not be parsed')
+            log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
+            log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
+            raise HTTPBadRequest('JSON is empty or content could not be parsed')
 
         print_temp_dir = self.request.registry.settings['print_temp_dir']
+        
 
         # Remove older files on the system
         delete_old_files(print_temp_dir)
 
         scheme = self.request.headers.get('X-Forwarded-Proto',
                                           self.request.scheme)
+        print_url = self.request.registry.settings['print_url']
         api_url = self.request.registry.settings['api_url']
         headers = dict(self.request.headers)
         headers.pop("Host", headers)
-        unique_filename = datetime.datetime.now().strftime("%y%m%d%H%M%S") + str(random.randint(1000, 9999))
+        # see https://github.com/mapfish/mapfish-print/blob/95a2f5b7bd9cf0e00779ae366ff4a71f4d7eea1b/core/src/main/java/org/mapfish/print/servlet/MapPrinterServlet.java#L922
+        
+        
+        #unique_filename = datetime.datetime.now().strftime("%y%m%d%H%M%S") + str(random.randint(1000, 9999))
+        unique_filename = str(uuid.uuid1()) + '@' + self.server_id
 
         with open(create_info_file(print_temp_dir, unique_filename), 'w+') as outfile:
             json.dump({'status': 'ongoing'}, outfile)
 
-        info = (spec, print_temp_dir, scheme, api_url, headers, unique_filename)
+        info = (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename)
         p = multiprocessing.Process(target=create_and_merge, args=(info,))
         p.start()
-        response = {'idToCheck': unique_filename}
+        #response = {'idToCheck': unique_filename}
+        
+        response = {"ref":unique_filename,
+                 "statusURL":"/service-print-main/print/status/{}.json".format(unique_filename),
+                 "downloadURL":"/service-print-main/print/report/{}".format(unique_filename)}
 
         return response
