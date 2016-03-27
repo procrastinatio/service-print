@@ -39,6 +39,9 @@ MAPFISH_MULTI_FILE_PREFIX = MAPFISH_FILE_PREFIX + '-multi'
 USE_MULTIPROCESS = False
 
 
+currentFuncName = lambda n=0: sys._getframe(n + 1).f_code.co_name
+
+
 def _zeitreihen(d, api_url):
     '''Returns the timestamps for a given scale and location for ch.swisstopo.zeitreihen
     '''
@@ -95,7 +98,15 @@ def _get_layers(spec):
     return layers
         
     
-
+@view_config(route_name='get_timestamps', renderer='jsonp')
+def get_timestamps(self):
+        jsonstring = urllib.unquote_plus(self.body)
+        spec = json.loads(jsonstring, encoding=self.charset)
+        
+        api_url = "//api3.geo.admin.ch"
+        
+        return _get_timestamps(spec, api_url)
+        
 def _get_timestamps(spec, api_url):
     '''Returns the layers indices to be printed for each timestamp
     For instance (u'19971231', [1, 2]), (u'19981231', [0, 1, 2])  '''
@@ -127,7 +138,16 @@ def _get_timestamps(spec, api_url):
                 log.debug(str(e))
                 timestamps = lyr['timestamps'] if 'timestamps' in lyr.keys() else None
         else:
-            timestamps = lyr['timestamps'] if 'timestamps' in lyr.keys() else None
+            dimensions = lyr.get('dimensions')
+            if dimensions is not None and 'Time' in dimensions:
+                params = lyr.get('dimensionParams')
+                if params is not None:
+                    try:
+                        timestamp = params.get('TIME')
+                        timestamps = [int(timestamp) if timestamp != 'current' else timestamp]
+                    except:
+                        timestamps = None
+                  
 
         if timestamps is not None:
             for ts in timestamps:
@@ -213,7 +233,7 @@ def worker(job):
     
     for lyr in tmp_spec['attributes']['map']['layers']:
         try:
-            del lyr['timestamps']  # this makes print server chocke
+            del lyr['timestamps']  # this makes print server crash
             layername = lyr['layer']
             if layername in layers:
             
@@ -238,10 +258,11 @@ def worker(job):
     #    # GetURL '141028163227.pdf.printout', file 'mapfish-print141028163227.pdf.printout'
     #    # We only get the pdf name and rely on the fact that they are stored on Zadara
     #    log.debug('[Worker] headers: {}'.format(dir(resp)))
+    referer =  headers.get('Referer', '-')
     opener = urllib2.build_opener(urllib2.HTTPHandler())
     request = urllib2.Request(url, data=json.dumps(tmp_spec))
     request.add_header("Content-Type",'application/json')
-    request.add_header("Referer", "http://samere.geo.admin.ch")
+    request.add_header("Referer", referer)
         
         
       
@@ -352,8 +373,11 @@ def create_and_merge(info):
         log.debug('[print_create] Going multipages')
         log.debug('[print_create] Timestamps to process: %s', all_timestamps.keys())
 
+    # FIXME jobs for single or multi should be the same
     if len(all_timestamps) < 1:
-        job = (0, url, headers, None, [], spec, print_temp_dir)
+        #job = (0, url, headers, None, [], spec, print_temp_dir)
+        job =  (0,   url, headers, None, [], spec, print_temp_dir, infofile, cancelfile, lock)
+        #job = (idx, url, headers, ts,   lyrs, tmp_spec, print_temp_dir, infofile, cancelfile, lock)
         jobs.append(job)
     else:
         last_timestamp = all_timestamps.keys()[-1]
@@ -406,6 +430,7 @@ def create_and_merge(info):
 
     if USE_MULTIPROCESS:
         pool = multiprocessing.Pool(NUMBER_POOL_PROCESSES)
+        log.debug('[{}] Using multiprocess for jobs: {}'.format(currentFuncName(), len(jobs)))
         pdfs = pool.map(worker, jobs)
         pool.close()
         try:
@@ -424,6 +449,7 @@ def create_and_merge(info):
             return 1
     else:
         pdfs = []
+        log.debug('[{}] Using single process for jobs: {}'.format(currentFuncName(), len(jobs)))
         for j in jobs:
             pdfs.append(worker(j))
             _increment_info(lock, infofile)
@@ -564,7 +590,7 @@ class PrintMulti(object):
         #response = {'idToCheck': unique_filename}
         
         response = {"ref":unique_filename,
-                 "statusURL":"/service-print-main/print/status/{}.json".format(unique_filename),
-                 "downloadURL":"/service-print-main/print/report/{}".format(unique_filename)}
+                    "statusURL":"/service-print-main/print/status/{}.json".format(unique_filename),
+                    "downloadURL":"/service-print-main/print/report/{}".format(unique_filename)}
 
         return response
