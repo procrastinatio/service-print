@@ -362,11 +362,13 @@ def create_and_merge(info):
     all_timestamps = []
 
     ## FIXME Make it more flexible    
-    create_pdf_url = 'http:' + print_url + '/print/print/geoadmin3/buildreport.pdf'
+    create_pdf_url = 'http:' + print_url + '/printserver/print/geoadmin3/buildreport.pdf'
 
     url = create_pdf_url + '?url=' + urllib.quote_plus(create_pdf_url)
     infofile = create_info_file(print_temp_dir, unique_filename)
     cancelfile = create_cancel_file(print_temp_dir, unique_filename)
+    
+    pdf_download_path = '/download/-multi' + unique_filename + '.pdf.printout'
 
     if _isMultiPage(spec):
         all_timestamps = _get_timestamps(spec, api_url)
@@ -426,7 +428,15 @@ def create_and_merge(info):
             jobs.append(job)
 
     with open(infofile, 'w+') as outfile:
-        json.dump({'status': 'ongoing', 'done': 0, 'total': len(jobs)}, outfile)
+        data = {
+                "done": False,
+                "status": "running",
+                "elapsedTime":  len(jobs),
+                "waitingTime": 0,
+                "downloadURL": pdf_download_path 
+            }
+        
+        json.dump(data, outfile)
 
     if USE_MULTIPROCESS:
         pool = multiprocessing.Pool(NUMBER_POOL_PROCESSES)
@@ -470,11 +480,17 @@ def create_and_merge(info):
 
     # FIXME
     #pdf_download_url = scheme + ':' + api_url + '/print/-multi' + unique_filename + '.pdf.printout'
-    pdf_download_url = scheme + ':' + print_url + '/download/-multi' + unique_filename + '.pdf.printout'
+    #pdf_download_path = '/download/-multi' + unique_filename + '.pdf.printout'
     with open(infofile, 'w+') as outfile:
-        json.dump({'status': 'done', 'getURL': pdf_download_url}, outfile)
+        #log.debug(infofile)
+        #data = json.load(outfile)
+        #data['done'] = True
+        #data['status'] = 'finished'
+        
+        #json.dump({'status': 'done', 'getURL': pdf_download_url}, outfile)
+        json.dump({'status':'finished', 'done':True,'downloadURL': pdf_download_path }, outfile)
 
-    log.info('[create_pdf] PDF ready to download: %s', pdf_download_url)
+    log.info('[create_pdf] PDF ready to download: %s', pdf_download_path)
 
     return 0
 
@@ -525,19 +541,22 @@ class PrintMulti(object):
     @view_config(route_name='print_progress', renderer='jsonp')
     def print_progress(self):
         print_temp_dir = self.request.registry.settings['print_temp_dir']
-        fileid = self.request.params.get('id')
+        fileid = self.request.matchdict["id"]
         filename = create_info_file(print_temp_dir, fileid)
         pdffile = create_pdf_path(print_temp_dir, fileid)
-
+        
         if not os.path.isfile(filename):
-            raise HTTPBadRequest()
+            raise HTTPBadRequest('No print job with id {}'.format(fileid))
 
         with open(filename, 'r') as data_file:
-            data = json.load(data_file)
+            try:
+                data = json.load(data_file)
+            except ValueError:
+                data = {'done': False, 'status':'error'}
 
         # When file is written, get current size
         if os.path.isfile(pdffile):
-            data['written'] = os.path.getsize(pdffile)
+            data['elapsedTime'] = os.path.getsize(pdffile)
 
         return data
 
@@ -578,19 +597,32 @@ class PrintMulti(object):
         # see https://github.com/mapfish/mapfish-print/blob/95a2f5b7bd9cf0e00779ae366ff4a71f4d7eea1b/core/src/main/java/org/mapfish/print/servlet/MapPrinterServlet.java#L922
         
         
-        #unique_filename = datetime.datetime.now().strftime("%y%m%d%H%M%S") + str(random.randint(1000, 9999))
-        unique_filename = str(uuid.uuid1()) + '@' + self.server_id
+        unique_filename = datetime.datetime.now().strftime("%y%m%d%H%M%S") + str(random.randint(1000, 9999))
+        
+        #unique_filename = str(uuid.uuid1()) + '@' + self.server_id
+        
+        pdf_download_path =  '/download/-multi' + unique_filename + '.pdf.printout'
 
         with open(create_info_file(print_temp_dir, unique_filename), 'w+') as outfile:
-            json.dump({'status': 'ongoing'}, outfile)
-
+            data = {
+                "done": False,
+                "status": "running",
+                "elapsedTime": 0,
+                "waitingTime": 0,
+                "downloadURL": pdf_download_path
+            }
+            #json.dump({'status': 'ongoing'}, outfile)
+            json.dump(data, outfile)
+        
+            
+      
         info = (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename)
         p = multiprocessing.Process(target=create_and_merge, args=(info,))
         p.start()
         #response = {'idToCheck': unique_filename}
         
         response = {"ref":unique_filename,
-                    "statusURL":"/service-print-main/print/status/{}.json".format(unique_filename),
-                    "downloadURL":"/service-print-main/print/report/{}".format(unique_filename)}
+                    "statusURL":"/print/print/geoadmin3/status/{}.json".format(unique_filename),
+                    "downloadURL":pdf_download_path}
 
         return response

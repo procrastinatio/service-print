@@ -23,9 +23,11 @@ def main(global_config, **settings):
 
     # route definitions
     config.add_route('ogcproxy', '/ogcproxy')
-    config.add_route('print_create', '/printmulti/print/geoadmin3/report.pdf')
-    config.add_route('print_progress', '/printprogress')
-    config.add_route('print_cancel', '/printcancel')
+    config.add_route('print_create', '/print/geoadmin3/report.pdf')
+    config.add_route('print_progress', '/print/geoadmin3/status/{id}.json')
+    config.add_route('print_cancel', '/print/geoadmin3/cancel/{id}.json')
+    #config.add_route('print_progress', '/printprogress')
+    #config.add_route('print_cancel', '/printcancel')
     config.add_route('dev', '/dev')
     config.add_route('checker', '/checker')
     config.add_route('checker_dev', '/checker_dev')
