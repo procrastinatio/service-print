@@ -68,7 +68,7 @@ def _increment_info(l, filename):
         with open(filename, 'r') as infile:
             data = json.load(infile)
 
-        data['done'] = data['done'] + 1
+        data['printed'] = data['printed'] + 1
 
         with open(filename, 'w+') as outfile:
             json.dump(data, outfile)
@@ -239,14 +239,18 @@ def worker(job):
             
                 lyr['dimensionParams']['TIME'] = str(timestamp)
         except:
-            pass
+            log.debug('[worker] Cannot fixe tmp_spec')
+            
+    log.debug('[worker] Finale partial spec\n----------------\n%s\n---------------\n', json.dumps(tmp_spec, indent=4, sort_keys=True))
+    #with open(os.path.join(print_temp_dir, '{}.json'.format(idx)), 'w+') as f:
+    #              f.write( json.dumps(tmp_spec, indent=4, sort_keys=True))
 
     #log.debug('[worker] tmp_spec: %s', json.dumps(tmp_spec))
 
     # Before launching print request, check if process is canceled
     if os.path.isfile(cancelfile):
         return (timestamp, None)
-    log.debug('[worker] Requesting: %s', url)
+    log.debug('[Worker] Requesting partial PDF for: %s', timestamp)
     #h = {'Referer': headers.get('Referer', 'http://map.geo.admin.ch'),#FIXME has to be somehting
     #     'Content-Type': 'application/json'} 
     #log.debug('[worker] headers: %s', h)
@@ -283,17 +287,18 @@ def worker(job):
             return (timestamp, None)
       
     if connection.code == 200:
-        CHUNK = 1024
+        CHUNK = 1024 * 50
         with open(localname, 'wb') as fp:
             while True:
                     chunk = connection.read(CHUNK)
                     if not chunk: break
                     fp.write(chunk)
         _increment_info(lock, infofile)
+        log.debug('[Worker] Partial PDF written to: %s', localname)
         
         return (timestamp, localname)
     else:
-        log.debug('[Worker] Failed get/generate PDF for: %s. Error: %s', timestamp, resp.status)
+        log.debug('[Worker] Failed get/generate PDF for: %s. Error: %s', timestamp, connection.code)
         log.debug('[Worker] %s', content)
         return (timestamp, None)
 
@@ -319,7 +324,7 @@ def create_and_merge(info):
             info_json = json.load(data_file)
 
         info_json['merged'] = 0
-
+        
         def write_info():
             with open(infofile, 'w+') as outfile:
                 json.dump(info_json, outfile)
@@ -343,12 +348,15 @@ def create_and_merge(info):
         try:
             info_json['filesize'] = expected_file_size
             info_json['written'] = 0
+            info_json['done'] = True
+            info_json['status'] = 'finished'
             write_info()
             filename = create_pdf_path(print_temp_dir, unique_filename)
             log.info('[_merge_pdfs] Writing file.')
             out = open(filename, 'wb')
             merger.write(out)
             log.info('[_merge_pdfs] Merged PDF written to: %s', filename)
+            log.debug(json.dumps(info_json, indent=4))
         except:
             return False
 
@@ -360,6 +368,8 @@ def create_and_merge(info):
 
     jobs = []
     all_timestamps = []
+    
+    
 
     ## FIXME Make it more flexible    
     create_pdf_url = 'http:' + print_url + '/printserver/print/geoadmin3/buildreport.pdf'
@@ -388,13 +398,17 @@ def create_and_merge(info):
             lyrs = all_timestamps[ts]
 
             tmp_spec = copy.deepcopy(spec)
+            
+            # FIXMe no effect at all
+            # these are indexes
             for lyr in lyrs:
                 try:
-                    tmp_spec['layers'][lyr]['params']['TIME'] = str(ts)
+                    tmp_spec['attributes']['map']['layers'][lyr]['dimensionParams']['TIME'] = str(ts)
                 except KeyError:
                     pass
-
+            
             if ts is not None:
+                # FIXME url qrcode
                 qrcodeurl = spec['attributes'].get('qrcodeurl', 'https://map.geo.admin.ch/') #['qrimage']
                 tmp_spec['pages'][0]['timestamp'] = str(ts[0:4]) # FIXME why did we add this char ???? + "\n"
 
@@ -420,8 +434,12 @@ def create_and_merge(info):
             if 'legends' in tmp_spec.keys() and ts != last_timestamp:
                 del tmp_spec['legends']
                 tmp_spec['enableLegends'] = False
+                
+                
 
             log.debug('[print_create] Processing timestamp: %s', ts)
+            
+            
 
             job = (idx, url, headers, ts, lyrs, tmp_spec, print_temp_dir, infofile, cancelfile, lock)
 
@@ -526,8 +544,10 @@ class PrintMulti(object):
     #@requires_authorization()
     @view_config(route_name='print_cancel', renderer='jsonp')
     def print_cancel(self):
+        if self.request.method == 'OPTIONS':
+            return Response(status=200)
         print_temp_dir = self.request.registry.settings['print_temp_dir']
-        fileid = self.request.params.get('id')
+        fileid = self.request.matchdict["id"]
         cancelfile = create_cancel_file(print_temp_dir, fileid)
         with open(cancelfile, 'a+'):
             pass
@@ -617,6 +637,7 @@ class PrintMulti(object):
             
       
         info = (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename)
+        
         p = multiprocessing.Process(target=create_and_merge, args=(info,))
         p.start()
         #response = {'idToCheck': unique_filename}
