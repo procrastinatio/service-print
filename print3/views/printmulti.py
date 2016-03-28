@@ -65,6 +65,7 @@ def _zeitreihen(d, api_url):
 def _increment_info(l, filename):
     l.acquire()
     try:
+        # FIXME infofile
         with open(filename, 'r') as infile:
             data = json.load(infile)
 
@@ -262,11 +263,16 @@ def worker(job):
     #    # GetURL '141028163227.pdf.printout', file 'mapfish-print141028163227.pdf.printout'
     #    # We only get the pdf name and rely on the fact that they are stored on Zadara
     #    log.debug('[Worker] headers: {}'.format(dir(resp)))
-    referer =  headers.get('Referer', '-')
-    opener = urllib2.build_opener(urllib2.HTTPHandler())
+    referer =  headers.get('Referer', 'https://print.geo.admin.ch')
+    
+    referer = 'https://print.geo.admin.ch'
+    opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=1))
     request = urllib2.Request(url, data=json.dumps(tmp_spec))
     request.add_header("Content-Type",'application/json')
-    request.add_header("Referer", referer)
+    request.add_header("Referer", referer) 
+    request.add_header("User-Agent",'MapFish Print salutes you')
+    
+    log.debug('[Worker] headers\n%s', headers)
         
         
       
@@ -278,13 +284,26 @@ def worker(job):
             localname = os.path.join(print_temp_dir, MAPFISH_FILE_PREFIX + filename)
      
             connection = opener.open(request)
-    except:
+    except urllib2.HTTPError as err:
+       if err.code == 404:
+           print "Page not found!"
+       elif err.code == 403:
+           print "Access denied!"
+       else:
+           print "Something happened! Error code", err.code
+           
+       return (timestamp, None)
+   
+    except urllib2.URLError as err:
+        log.debug('[Worker] Failed timestamp: %s', timestamp)
+        log.debug('[Worker] Failed timestamp: %s', err.reason)
+    '''except:
             log.debug('[Worker] Failed timestamp: %s', timestamp)
             exc_type, exc_value, exc_traceback = sys.exc_info()
             log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
             log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
             
-            return (timestamp, None)
+            return (timestamp, None)'''
       
     if connection.code == 200:
         CHUNK = 1024 * 50
@@ -319,13 +338,14 @@ def create_and_merge(info):
     def _merge_pdfs(pdfs, infofile):
         '''Merge individual pdfs into a big one'''
         '''We assume this happens in one process'''
-
+        # FIXME infofile
         with open(infofile, 'r') as data_file:
             info_json = json.load(data_file)
 
         info_json['merged'] = 0
         
         def write_info():
+            # FIXME infofile
             with open(infofile, 'w+') as outfile:
                 json.dump(info_json, outfile)
 
@@ -444,12 +464,14 @@ def create_and_merge(info):
             job = (idx, url, headers, ts, lyrs, tmp_spec, print_temp_dir, infofile, cancelfile, lock)
 
             jobs.append(job)
-
+    # FIXME infofile
     with open(infofile, 'w+') as outfile:
         data = {
                 "done": False,
                 "status": "running",
-                "elapsedTime":  len(jobs),
+                "total": len(jobs),
+                "printed": 0,
+                "elapsedTime":  1,
                 "waitingTime": 0,
                 "downloadURL": pdf_download_path 
             }
@@ -487,7 +509,7 @@ def create_and_merge(info):
     if os.path.isfile(cancelfile):
         return 0
 
-    log.debug('pdfs %s', pdfs)
+    log.debug('[create_and_merge] Pdfs to merge %s', pdfs)
     if len([i for i, v in enumerate(pdfs) if v[1] is None]) > 0:
         log.error('One or more partial PDF is missing. Cannot merge PDF')
         return 2
@@ -496,17 +518,20 @@ def create_and_merge(info):
         log.error('Something went wrong while merging PDFs')
         return 3
 
-    # FIXME
+    # FIXME infofile
     #pdf_download_url = scheme + ':' + api_url + '/print/-multi' + unique_filename + '.pdf.printout'
     #pdf_download_path = '/download/-multi' + unique_filename + '.pdf.printout'
     with open(infofile, 'w+') as outfile:
-        #log.debug(infofile)
-        #data = json.load(outfile)
-        #data['done'] = True
-        #data['status'] = 'finished'
+        try:
+            data = json.load(outfile)
+        except ValueError:
+            data = {}
+        data['done'] = True
+        data['status'] = 'finished'
+        data['downloadURL'] = pdf_download_path
         
         #json.dump({'status': 'done', 'getURL': pdf_download_url}, outfile)
-        json.dump({'status':'finished', 'done':True,'downloadURL': pdf_download_path }, outfile)
+        json.dump(data, outfile)
 
     log.info('[create_pdf] PDF ready to download: %s', pdf_download_path)
 
@@ -627,7 +652,7 @@ class PrintMulti(object):
             data = {
                 "done": False,
                 "status": "running",
-                "elapsedTime": 0,
+                "elapsedTime": 1,
                 "waitingTime": 0,
                 "downloadURL": pdf_download_path
             }
