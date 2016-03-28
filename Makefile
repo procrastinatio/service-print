@@ -13,7 +13,8 @@ INSTALL_DIRECTORY := .venv
 MODWSGI_USER := www-data
 NO_TESTS ?= withtests
 NODE_DIRECTORY := node_modules
-PRINT_URL ?= //service-print.dev.bgdi.ch
+PRINT_PROXY_URL ?= //service-print.dev.bgdi.ch
+PRINT_SERVER_URL ?= ${PRINT_PROXY_URL}/printserver
 PRINT_INPUT :=  index.html favicon.ico print-apps mapfish_transparent.png META-INF WEB-INF
 PRINT_OUTPUT_BASE := /srv/tomcat/tomcat1/webapps/service-print-$(APACHE_BASE_PATH)
 PRINT_OUTPUT := $(PRINT_OUTPUT_BASE).war
@@ -91,7 +92,8 @@ help:
 	@echo "Variables:"
 	@echo "APACHE_ENTRY_PATH:   ${APACHE_ENTRY_PATH}"
 	@echo "API_URL:             ${API_URL}"
-	@echo "PRINT_URL:           ${PRINT_URL}"
+	@echo "PRINT_PROXY_URL:     ${PRINT_PROXY_URL}"
+	@echo "PRINT_SERVER_URL:    ${PRINT_SERVER_URL}"
 	@echo "BRANCH_STAGING:      ${BRANCH_STAGING}"
 	@echo "DBHOST:              ${DBHOST}"
 	@echo "DBSTAGING:           ${DBSTAGING}"
@@ -299,7 +301,8 @@ production.ini: production.ini.in
 		--var "dbstaging=$(DBSTAGING)" \
 		--var "zadara_dir=$(ZADARA_DIR)" \
 		--var "api_url=$(API_URL)" \
-		--var "print_url=$(PRINT_URL)" \
+		--var "print_proxy_url=$(PRINT_PROXY_URL)" \
+		--var "print_server_url=$(PRINT_SERVER_URL)" \
 		--var "geodata_staging=$(GEODATA_STAGING)" \
 		--var "sphinxhost=$(SPHINXHOST)" \
 		--var "wmshost=$(WMSHOST)" \

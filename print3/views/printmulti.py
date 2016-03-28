@@ -325,7 +325,7 @@ def worker(job):
 def create_and_merge(info):
 
     lock = multiprocessing.Manager().Lock()
-    (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename) = info
+    (spec, print_temp_dir, scheme, api_url, print_proxy_url, print_server_url, headers, unique_filename) = info
 
     def _isMultiPage(spec):
         isMultiPage = False
@@ -388,7 +388,7 @@ def create_and_merge(info):
     all_timestamps = []
 
     # FIXME Make it more flexible
-    create_pdf_url = 'http:' + print_url + '/printserver/print/geoadmin3/buildreport.pdf'
+    create_pdf_url = 'http:' + print_server_url + '/print/geoadmin3/buildreport.pdf'
 
     url = create_pdf_url + '?url=' + urllib.quote_plus(create_pdf_url)
     infofile = create_info_file(print_temp_dir, unique_filename)
@@ -626,7 +626,8 @@ class PrintMulti(object):
 
         scheme = self.request.headers.get('X-Forwarded-Proto',
                                           self.request.scheme)
-        print_url = self.request.registry.settings['print_url']
+        print_proxy_url = self.request.registry.settings['print_proxy_url']
+        print_server_url = self.request.registry.settings['print_server_url']
         api_url = self.request.registry.settings['api_url']
         headers = dict(self.request.headers)
         headers.pop("Host", headers)
@@ -649,7 +650,7 @@ class PrintMulti(object):
             #json.dump({'status': 'ongoing'}, outfile)
             json.dump(data, outfile)
 
-        info = (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename)
+        info = (spec, print_temp_dir, scheme, api_url, print_proxy_url, print_server_url, headers, unique_filename)
 
         p = multiprocessing.Process(target=create_and_merge, args=(info,))
         p.start()
