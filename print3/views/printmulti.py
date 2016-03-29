@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 log.setLevel(logging.INFO)
 USE_MULTIPROCESS = True
+debuglevel = 0
 
 NUMBER_POOL_PROCESSES = multiprocessing.cpu_count()
 MAPFISH_FILE_PREFIX = 'mapfish-print'
@@ -265,7 +266,7 @@ def worker(job):
     referer = headers.get('Referer', 'https://print.geo.admin.ch')
 
     referer = 'https://print.geo.admin.ch'
-    opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=1))
+    opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=debuglevel))
     request = urllib2.Request(url, data=json.dumps(tmp_spec))
     request.add_header("Content-Type", 'application/json')
     request.add_header("Referer", referer)
@@ -311,11 +312,11 @@ def worker(job):
                     break
                 fp.write(chunk)
         _increment_info(lock, infofile)
-        log.debug('[Worker] Partial PDF written to: %s', localname)
+        log.info('[Worker] Partial PDF written to: %s', localname)
 
         return (timestamp, localname)
     else:
-        log.debug('[Worker] Failed get/generate PDF for: %s. Error: %s', timestamp, connection.code)
+        log.error('[Worker] Failed get/generate PDF for: %s. Error: %s', timestamp, connection.code)
         log.debug('[Worker] %s', content)
         return (timestamp, None)
 
@@ -398,7 +399,7 @@ def create_and_merge(info):
 
     if _isMultiPage(spec):
         all_timestamps = _get_timestamps(spec, api_url)
-        log.debug('[print_create] Going multipages')
+        log.info('[print_create] Going multipages')
         log.debug('[print_create] Timestamps to process: %s', all_timestamps.keys())
 
     # FIXME jobs for single or multi should be the same
@@ -472,7 +473,7 @@ def create_and_merge(info):
 
     if USE_MULTIPROCESS:
         pool = multiprocessing.Pool(NUMBER_POOL_PROCESSES)
-        log.debug('[{}] Using multiprocess for jobs: {}'.format(currentFuncName(), len(jobs)))
+        log.info('[{}] Using multiprocess for {} jobs'.format(currentFuncName(), len(jobs)))
         pdfs = pool.map(worker, jobs)
         pool.close()
         try:
@@ -491,7 +492,7 @@ def create_and_merge(info):
             return 1
     else:
         pdfs = []
-        log.debug('[{}] Using single process for jobs: {}'.format(currentFuncName(), len(jobs)))
+        log.info('[{}] Using single process for {} jobs'.format(currentFuncName(), len(jobs)))
         for j in jobs:
             pdfs.append(worker(j))
             _increment_info(lock, infofile)
@@ -563,6 +564,7 @@ class PrintMulti(object):
     def print_cancel(self):
         if self.request.method == 'OPTIONS':
             return Response(status=200)
+        log.info("[print_cancel] Job with id=%s cancelled", fileid)
         print_temp_dir = self.request.registry.settings['print_temp_dir']
         fileid = self.request.matchdict["id"]
         cancelfile = create_cancel_file(print_temp_dir, fileid)
@@ -571,6 +573,8 @@ class PrintMulti(object):
 
         if not os.path.isfile(cancelfile):
             raise HTTPInternalServerError('Could not create cancel file with given id')
+
+        log.info("[print_cancel] Job with id=%s cancelled", fileid)
 
         return Response(status=200)
 
@@ -594,6 +598,7 @@ class PrintMulti(object):
         # When file is written, get current size
         if os.path.isfile(pdffile):
             data['elapsedTime'] = os.path.getsize(pdffile)
+        log.info("[print_progress] Progress for job id=%s, 'done'=%s", fileid, data['done'])
 
         return data
 
@@ -603,6 +608,7 @@ class PrintMulti(object):
         if self.request.method == 'OPTIONS':
             return Response(status=200)
 
+        log.info("[print_create] New print job")
         # delete all child processes that have already terminated
         # but are <defunct>. This is a side_effect of the below function
         multiprocessing.active_children()
@@ -613,7 +619,7 @@ class PrintMulti(object):
         try:
             spec = json.loads(jsonstring, encoding=self.request.charset)
         except:
-            log.debug('JSON content could not be parsed')
+            log.error('[print_create] JSON content could not be parsed')
             exc_type, exc_value, exc_traceback = sys.exc_info()
             log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
             log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
