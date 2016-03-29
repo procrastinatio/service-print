@@ -14,7 +14,7 @@ import time
 import multiprocessing
 import random
 import uuid
-from urlparse import urlparse, parse_qs, urlsplit, urlunparse
+from urlparse import urlparse, parse_qs, urlunparse
 from urllib import urlencode, quote_plus, unquote_plus
 
 from httplib2 import Http
@@ -25,7 +25,6 @@ from PyPDF2 import PdfFileMerger
 from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPBadRequest, HTTPInternalServerError
 from pyramid.response import Response
-from print3.lib.decorators import requires_authorization
 
 import logging
 log = logging.getLogger(__name__)
@@ -37,7 +36,6 @@ debuglevel = 0
 NUMBER_POOL_PROCESSES = multiprocessing.cpu_count()
 MAPFISH_FILE_PREFIX = 'mapfish-print'
 MAPFISH_MULTI_FILE_PREFIX = MAPFISH_FILE_PREFIX + '-multi'
-
 
 
 currentFuncName = lambda n=0: sys._getframe(n + 1).f_code.co_name
@@ -243,29 +241,13 @@ def worker(job):
             log.debug('[worker] Cannot fixe tmp_spec')
 
     log.debug('[worker] Finale partial spec\n----------------\n%s\n---------------\n', json.dumps(tmp_spec, indent=4, sort_keys=True))
-    # with open(os.path.join(print_temp_dir, '{}.json'.format(idx)), 'w+') as f:
-    #              f.write( json.dumps(tmp_spec, indent=4, sort_keys=True))
-
-    #log.debug('[worker] tmp_spec: %s', json.dumps(tmp_spec))
 
     # Before launching print request, check if process is canceled
     if os.path.isfile(cancelfile):
         return (timestamp, None)
     log.debug('[Worker] Requesting partial PDF for: %s', timestamp)
-    # h = {'Referer': headers.get('Referer', 'http://map.geo.admin.ch'),#FIXME has to be somehting
-    #     'Content-Type': 'application/json'}
-    #log.debug('[worker] headers: %s', h)
-    #http = Http(disable_ssl_certificate_validation=True)
-    # resp, content = http.request(url, method='POST',
-    #                            body=json.dumps(tmp_spec), headers=h)
+    referer = headers.get('Referer', '')
 
-    # if int(resp.status) == 200:
-    #    # GetURL '141028163227.pdf.printout', file 'mapfish-print141028163227.pdf.printout'
-    #    # We only get the pdf name and rely on the fact that they are stored on Zadara
-    #    log.debug('[Worker] headers: {}'.format(dir(resp)))
-    referer = headers.get('Referer', 'https://print.geo.admin.ch')
-
-    referer = 'https://print.geo.admin.ch'
     opener = urllib2.build_opener(urllib2.HTTPHandler(debuglevel=debuglevel))
     request = urllib2.Request(url, data=json.dumps(tmp_spec))
     request.add_header("Content-Type", 'application/json')
@@ -275,33 +257,26 @@ def worker(job):
     log.debug('[Worker] headers\n%s', headers)
 
     try:
-            #pdf_url = json.loads(content)['downloadURL']
-            #log.debug('[Worker] pdf_url: {}'.format(pdf_url))
-            #filename = os.path.basename(urlsplit(pdf_url).path)
         filename = str(uuid.uuid1())
         localname = os.path.join(print_temp_dir, MAPFISH_FILE_PREFIX + filename)
 
         connection = opener.open(request)
     except urllib2.HTTPError as err:
         if err.code == 404:
-            print "Page not found!"
+            log.error("Page %s not found", url)
         elif err.code == 403:
-            print "Access denied!"
+            log.error("Access to %s denied", url)
         else:
-            print "Something happened! Error code", err.code
+            log.error("Unkonw error while accessing %s:", url, err.code)
 
         return (timestamp, None)
 
     except urllib2.URLError as err:
         log.debug('[Worker] Failed timestamp: %s', timestamp)
         log.debug('[Worker] Failed timestamp: %s', err.reason)
-    '''except:
-            log.debug('[Worker] Failed timestamp: %s', timestamp)
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
-            log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
-
-            return (timestamp, None)'''
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        log.debug("*** Traceback:/n{}".format(traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)))
+        log.debug("*** Exception:/n{}".format(traceback.print_exception(exc_type, exc_value, exc_traceback, limit=2, file=sys.stdout)))
 
     if connection.code == 200:
         CHUNK = 1024 * 50
@@ -317,7 +292,7 @@ def worker(job):
         return (timestamp, localname)
     else:
         log.error('[Worker] Failed get/generate PDF for: %s. Error: %s', timestamp, connection.code)
-        log.debug('[Worker] %s', content)
+
         return (timestamp, None)
 
 
@@ -404,9 +379,7 @@ def create_and_merge(info):
 
     # FIXME jobs for single or multi should be the same
     if len(all_timestamps) < 1:
-        #job = (0, url, headers, None, [], spec, print_temp_dir)
         job = (0,   url, headers, None, [], spec, print_temp_dir, infofile, cancelfile, lock)
-        #job = (idx, url, headers, ts,   lyrs, tmp_spec, print_temp_dir, infofile, cancelfile, lock)
         jobs.append(job)
     else:
         last_timestamp = all_timestamps.keys()[-1]
@@ -416,8 +389,7 @@ def create_and_merge(info):
 
             tmp_spec = copy.deepcopy(spec)
 
-            # FIXMe no effect at all
-            # these are indexes
+            # These are indexes
             for lyr in lyrs:
                 try:
                     tmp_spec['attributes']['map']['layers'][lyr]['dimensionParams']['TIME'] = str(ts)
@@ -512,8 +484,6 @@ def create_and_merge(info):
         return 3
 
     # FIXME infofile
-    #pdf_download_url = scheme + ':' + api_url + '/print/-multi' + unique_filename + '.pdf.printout'
-    #pdf_download_path = '/download/-multi' + unique_filename + '.pdf.printout'
     with open(infofile, 'w+') as outfile:
         try:
             data = json.load(outfile)
@@ -523,7 +493,6 @@ def create_and_merge(info):
         data['status'] = 'finished'
         data['downloadURL'] = pdf_download_path
 
-        #json.dump({'status': 'done', 'getURL': pdf_download_url}, outfile)
         json.dump(data, outfile)
 
     log.info('[create_pdf] PDF ready to download: %s', pdf_download_path)
@@ -559,12 +528,10 @@ class PrintMulti(object):
         self.request = request
         self.server_id  = request.registry.settings['server_id']
 
-    #@requires_authorization()
     @view_config(route_name='print_cancel', renderer='jsonp')
     def print_cancel(self):
         if self.request.method == 'OPTIONS':
             return Response(status=200)
-        log.info("[print_cancel] Job with id=%s cancelled", fileid)
         print_temp_dir = self.request.registry.settings['print_temp_dir']
         fileid = self.request.matchdict["id"]
         cancelfile = create_cancel_file(print_temp_dir, fileid)
@@ -578,7 +545,6 @@ class PrintMulti(object):
 
         return Response(status=200)
 
-    #@requires_authorization()
     @view_config(route_name='print_progress', renderer='jsonp')
     def print_progress(self):
         print_temp_dir = self.request.registry.settings['print_temp_dir']
@@ -602,7 +568,6 @@ class PrintMulti(object):
 
         return data
 
-    #@requires_authorization()
     @view_config(route_name='print_create', renderer='jsonp')
     def print_create(self):
         if self.request.method == 'OPTIONS':
@@ -637,12 +602,8 @@ class PrintMulti(object):
         api_url = self.request.registry.settings['api_url']
         headers = dict(self.request.headers)
         headers.pop("Host", headers)
-        # see https://github.com/mapfish/mapfish-print/blob/95a2f5b7bd9cf0e00779ae366ff4a71f4d7eea1b/core/src/main/java/org/mapfish/print/servlet/MapPrinterServlet.java#L922
 
         unique_filename = datetime.datetime.now().strftime("%y%m%d%H%M%S") + str(random.randint(1000, 9999))
-
-        #unique_filename = str(uuid.uuid1()) + '@' + self.server_id
-
         pdf_download_path = '/download/-multi' + unique_filename + '.pdf.printout'
 
         with open(create_info_file(print_temp_dir, unique_filename), 'w+') as outfile:
@@ -653,14 +614,12 @@ class PrintMulti(object):
                 "waitingTime": 0,
                 "downloadURL": pdf_download_path
             }
-            #json.dump({'status': 'ongoing'}, outfile)
             json.dump(data, outfile)
 
         info = (spec, print_temp_dir, scheme, api_url, print_proxy_url, print_server_url, headers, unique_filename)
 
         p = multiprocessing.Process(target=create_and_merge, args=(info,))
         p.start()
-        #response = {'idToCheck': unique_filename}
 
         response = {"ref": unique_filename,
                     "statusURL": "/print/print/geoadmin3/status/{}.json".format(unique_filename),

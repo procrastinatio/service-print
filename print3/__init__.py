@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from pyramid.config import Configurator
-from pyramid.events import BeforeRender, NewRequest
 from pyramid.renderers import JSONP
 
 
@@ -13,7 +12,6 @@ def main(global_config, **settings):
     config = Configurator(settings=settings)
 
     # renderers
-    # config.add_mako_renderer('.js')
     config.add_renderer('jsonp', JSONP(param_name='callback', indent=None, separators=(',', ':')))
 
     # route definitions
@@ -21,8 +19,6 @@ def main(global_config, **settings):
     config.add_route('print_create', '/print/geoadmin3/report.pdf')
     config.add_route('print_progress', '/print/status/{id}.json')
     config.add_route('print_cancel', '/print/cancel/{id}')
-    #config.add_route('print_progress', '/printprogress')
-    #config.add_route('print_cancel', '/printcancel')
     config.add_route('dev', '/dev')
     config.add_route('checker', '/checker')
     config.add_route('checker_dev', '/checker_dev')
