@@ -24,6 +24,8 @@ def main(global_config, **settings):
     config.add_route('checker_dev', '/checker_dev')
 
     config.add_route('get_timestamps', '/printmulti/timestamps')
+    config.add_static_view('/', 'print3:static/')
+
     # required to find code decorated by view_config
     config.scan(ignore=['print3.tests', 'print3.models.bod'])
     return config.make_wsgi_app()
