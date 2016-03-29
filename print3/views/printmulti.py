@@ -30,13 +30,13 @@ from print3.lib.decorators import requires_authorization
 import logging
 log = logging.getLogger(__name__)
 
-log.setLevel(logging.DEBUG)
-
+log.setLevel(logging.INFO)
+USE_MULTIPROCESS = True
 
 NUMBER_POOL_PROCESSES = multiprocessing.cpu_count()
 MAPFISH_FILE_PREFIX = 'mapfish-print'
 MAPFISH_MULTI_FILE_PREFIX = MAPFISH_FILE_PREFIX + '-multi'
-USE_MULTIPROCESS = False
+
 
 
 currentFuncName = lambda n=0: sys._getframe(n + 1).f_code.co_name
