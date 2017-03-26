@@ -91,10 +91,13 @@ To build your docker image
     docker build -t service-print:latest .
 
 Now you may run your image. 
-  * To ease debug, you may want to mmount the directory _/val/local/print_ on your host.
-  * DEfine _SERVICE_PRINT_PROXY_URL_ to where your tomcat mapfish print server lives
 
-    docker run -d -p 5000:5000 -v ~/projects_swisstopo/docker_tutorial/service_print/tmp:/var/local/print  -e SERVICE_PRINT_PROXY_URL='//35.187.44.190:8080/service-print-main' service-print 
+To ease debug, you may want to mmount the directory _/val/local/print_ on your host.
+Define `SERVICE_PRINT_PROXY_URL` to where your tomcat mapfish print server lives.
+
+    docker run -d -p 5000:5000 -v /tmp:/var/local/print  \ 
+      -e SERVICE_PRINT_PROXY_URL='//35.187.44.190:8080/service-print-main' service-print 
+
 
 If you want to test the _uWSGI_settings:
 
