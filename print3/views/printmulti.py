@@ -25,6 +25,7 @@ from pyramid.httpexceptions import HTTPBadRequest, HTTPInternalServerError
 from pyramid.response import Response
 # from print3.lib.decorators import requires_authorization
 
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -221,6 +222,9 @@ def worker(job):
             log.debug('[Worker] pdf_url: %s', pdf_url)
             filename = os.path.basename(urlsplit(pdf_url).path)
             localname = os.path.join(print_temp_dir, MAPFISH_FILE_PREFIX + filename)
+            
+            urllib.urlretrieve(pdf_url, localname)
+
         except:
             log.debug('[Worker] Failed timestamp: %s', timestamp)
             exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -241,7 +245,7 @@ def worker(job):
 def create_and_merge(info):
 
     lock = multiprocessing.Manager().Lock()
-    (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename) = info
+    (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename, request) = info
 
     def _isMultiPage(spec):
         isMultiPage = False
@@ -265,6 +269,7 @@ def create_and_merge(info):
         log.info('[_merge_pdfs] Starting merge')
         merger = PdfFileMerger()
         expected_file_size = 0
+        log.debug('[_merge_pdfs] %s' % pdfs)
         for pdf in sorted(pdfs, key=lambda x: x[0]):
 
             ts, localname = pdf
@@ -299,7 +304,7 @@ def create_and_merge(info):
     jobs = []
     all_timestamps = []
 
-    create_pdf_url = 'http:' + print_url + '/print/create.json'
+    create_pdf_url = 'http:' + print_url + '/pdf/create.json'
 
     url = create_pdf_url + '?url=' + urllib.quote_plus(create_pdf_url)
     infofile = create_info_file(print_temp_dir, unique_filename)
@@ -400,7 +405,8 @@ def create_and_merge(info):
         log.error('Something went wrong while merging PDFs')
         return 3
 
-    pdf_download_url = scheme + ':' + print_url + '/print/-multi' + unique_filename + '.pdf.printout'
+    pdf_download_url = scheme + ':' + print_url + '/pdf/-multi' + unique_filename + '.pdf.printout'
+    pdf_download_url = scheme + '://' + request.host + '/pdf/mapfish-print-multi' + unique_filename + '.pdf.printout'
     with open(infofile, 'w+') as outfile:
         json.dump({'status': 'done', 'getURL': pdf_download_url}, outfile)
 
@@ -508,7 +514,7 @@ class PrintMulti(object):
         with open(create_info_file(print_temp_dir, unique_filename), 'w+') as outfile:
             json.dump({'status': 'ongoing'}, outfile)
 
-        info = (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename)
+        info = (spec, print_temp_dir, scheme, api_url, print_url, headers, unique_filename, self.request)
         p = multiprocessing.Process(target=create_and_merge, args=(info,))
         p.start()
         response = {'idToCheck': unique_filename}
