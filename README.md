@@ -80,6 +80,29 @@ If you want to use the deploy configuration of directory from which you are exec
 
 `make deployint SNAPSHOT=201512011411 DEPLOYCONFIG=from_current_directory`
 
+## Docker specific
+
+Create the application file
+
+    make development.ini production.ini
+
+To build your docker image
+
+    docker build -t service-print:latest .
+
+Now you may run your image. 
+
+To ease debug, you may want to mmount the directory _/val/local/print_ on your host.
+Define `SERVICE_PRINT_PROXY_URL` to where your tomcat mapfish print server lives.
+
+    docker run -d -p 5000:5000 -v /tmp:/var/local/print  \ 
+      -e SERVICE_PRINT_PROXY_URL='//35.187.44.190:8080/service-print-main' service-print 
+
+
+If you want to test the _uWSGI_settings:
+
+    uwsgi --http  :5000 --master --wsgi-file app.py --callable application --processes 1
+
 
 ## Python Code Styling
 
