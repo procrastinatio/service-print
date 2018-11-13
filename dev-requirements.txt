@@ -1,7 +1,7 @@
 autopep8
 coverage
 flake8==2.6.2
-Mako
+Mako==1.0.7
 mock==1.0.1
 nose
 requests-mock
