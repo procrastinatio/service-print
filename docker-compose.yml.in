@@ -1,0 +1,64 @@
+version: '2'
+services:
+  nginx:
+% if rancher_deploy == 'false':
+    build: nginx/
+% endif
+    image: swisstopo/service-print-nginx:${image_tag}
+    env_file:
+    - ${rancher_label}.env
+    environment:
+      NGINX_PORT: ${nginx_port}
+    network_mode: "host"
+    ports:
+    - "${nginx_port}:${nginx_port}"
+    volumes:
+      - /var/local/efs-applications-rw/print/${rancher_label}:/var/local/print
+    depends_on:
+    - tomcat
+    - wsgi
+    labels:
+      io.rancher.scheduler.affinity:host_label: application=print,staging=${rancher_label}
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.global: 'true'
+  tomcat:
+% if rancher_deploy == 'false':
+    build: tomcat/
+% endif
+    image: swisstopo/service-print-tomcat:${image_tag}
+    env_file:
+    - ${rancher_label}.env
+    environment:
+      TOMCAT_PORT: ${tomcat_port}
+      CATALINA_OPTS: -Xmx2g -Xms2g -XX:MaxPermSize=1024m
+    ports:
+      - "${tomcat_port}:8080"
+    volumes:
+      - /var/local/efs-applications-rw/print/${rancher_label}:/var/local/print
+    labels:
+      io.rancher.scheduler.affinity:host_label: application=print,staging=${rancher_label}
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.global: 'true'
+  wsgi:
+% if rancher_deploy == 'false':
+    build: .
+% endif
+    image: swisstopo/service-print:${image_tag}
+    env_file:
+    - ${rancher_label}.env
+    environment:
+      WSGI_PORT: ${wsgi_port}
+    command :
+    - python
+    - print3/wsgi.py
+    network_mode: "host"
+    ports:
+    - "${wsgi_port}:${wsgi_port}"
+    volumes:
+      - /var/local/efs-applications-rw/print/${rancher_label}:/var/local/print
+    depends_on:
+    - tomcat
+    labels:
+      io.rancher.scheduler.affinity:host_label: application=print,staging=${rancher_label}
+      io.rancher.container.pull_image: always
+      io.rancher.scheduler.global: 'true'
