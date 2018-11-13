@@ -10,7 +10,7 @@ pyramid==1.10.1
 pyramid-debugtoolbar==4.5
 PyPDF2==1.26.0
 PyYAML==3.13
-regex==2014.02.19
+regex==2018.11.07
 repoze.lru==0.6
 requests==2.5.1
 six==1.10.0
