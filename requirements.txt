@@ -15,6 +15,6 @@ repoze.lru==0.7
 requests==2.20.1
 six==1.11.0
 waitress==1.1.0
-WebOb==1.6.1
+WebOb==1.8.4
 WebTest==2.0.21
 zope.interface==4.2.0
