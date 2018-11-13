@@ -12,7 +12,7 @@ PyPDF2==1.26.0
 PyYAML==3.13
 regex==2018.11.07
 repoze.lru==0.7
-requests==2.5.1
+requests==2.20.1
 six==1.10.0
 waitress==0.9
 WebOb==1.6.1
