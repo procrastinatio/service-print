@@ -2,7 +2,7 @@ autopep8
 coverage
 flake8==2.6.2
 Mako
-mock==1.0.1
+mock==2.0.0
 nose
 requests-mock
 pyproj
