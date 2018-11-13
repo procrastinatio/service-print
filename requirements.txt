@@ -13,7 +13,7 @@ PyYAML==3.13
 regex==2018.11.07
 repoze.lru==0.7
 requests==2.20.1
-six==1.10.0
+six==1.11.0
 waitress==0.9
 WebOb==1.6.1
 WebTest==2.0.21
