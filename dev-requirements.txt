@@ -5,4 +5,4 @@ Mako
 mock==1.0.1
 nose
 requests-mock
-pyproj
+pyproj==1.9.5.1
