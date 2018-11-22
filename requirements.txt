@@ -8,7 +8,7 @@ polib==1.0.3
 pyproj==1.9.5.1
 PyPDF2==1.23
 PyYAML==3.10
-regex==2014.02.19
+regex==2018.11.22
 six==1.10.0
 Flask==0.12.1
 gevent==1.2.2
