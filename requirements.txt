@@ -3,7 +3,7 @@ geojson==2.4.1
 polib==1.0.3
 pyproj==1.9.6
 PyYAML==5.1
-regex==2019.03.09
+regex==2021.3.17
 Flask==1.0.2
 gevent==1.4.0
 gunicorn==19.9.0
