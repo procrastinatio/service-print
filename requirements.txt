@@ -1,4 +1,4 @@
-decorator==3.4.0
+decorator==5.0.8
 geojson==2.4.1
 polib==1.0.3
 pyproj==1.9.6
