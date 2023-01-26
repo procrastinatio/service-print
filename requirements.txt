@@ -1,5 +1,5 @@
 decorator==3.4.0
-geojson==2.4.1
+geojson==3.0.0
 polib==1.0.3
 pyproj==1.9.6
 PyYAML==5.1
