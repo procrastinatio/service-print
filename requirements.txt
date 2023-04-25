@@ -4,7 +4,7 @@ polib==1.0.3
 pyproj==1.9.6
 PyYAML==5.1
 regex==2019.03.09
-Flask==1.0.2
+Flask==2.3.0
 gevent==1.4.0
 gunicorn==19.9.0
 requests==2.21.0
